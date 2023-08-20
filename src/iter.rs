@@ -89,3 +89,9 @@ impl<'a, T> IntoIterator for &'a mut VecSlice<'_, T> {
         self.vec[self.start..self.end].iter_mut()
     }
 }
+
+impl<'a, T> From<&'a mut Vec<T>> for VecSlice<'a, T> {
+    fn from(vec: &'a mut Vec<T>) -> Self {
+        Self::new(.., vec)
+    }
+}

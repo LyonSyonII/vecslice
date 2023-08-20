@@ -1,8 +1,11 @@
 [package]
 name = "vecslice"
+description = "Growable slice of a Vec."
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["Liam Garriga <liam@garriga.dev>"]
+license = "MIT"
+keywords = ["vec", "slice", "vecslice", "growable"]
+categories = ["data-structures"]
 
 [dependencies]
