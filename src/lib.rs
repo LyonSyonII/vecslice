@@ -1,6 +1,7 @@
 use core::ops::RangeBounds;
 
 pub mod iter;
+pub mod index;
 
 /// Growable mutable reference on a [`Vec`].
 /// 
@@ -403,15 +404,15 @@ impl<'a, T> VecSlice<'a, T> {
     }
 }
 
-impl<T: std::fmt::Debug> std::fmt::Debug for VecSlice<'_, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("VecSlice").field("slice", &&self.vec[self.start..self.end]).field("start", &self.start).field("end", &self.end).field("vec", &self.vec).finish()
-    }
-}
-
 impl<T> Extend<T> for VecSlice<'_, T> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         self.vec.splice(self.end..self.end, iter);
+    }
+}
+
+impl<T: std::fmt::Debug> std::fmt::Debug for VecSlice<'_, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VecSlice").field("slice", &&self.vec[self.start..self.end]).field("start", &self.start).field("end", &self.end).field("vec", &self.vec).finish()
     }
 }
 
