@@ -239,6 +239,28 @@ impl<'a, T> VecSlice<'a, T> {
         self.vec.remove(self.start+index)
     }
     
+    /// Clears the slice, removing all values.
+    ///
+    /// Note that this method has no effect on the allocated capacity
+    /// of the underlying vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vecslice::Slice;
+    /// 
+    /// let mut vec = vec![1, 2, 3];
+    /// let mut slice = vec.vecslice(1..);
+    ///
+    /// slice.clear();
+    ///
+    /// assert!(slice.is_empty());
+    /// assert_eq!(vec, [1]);
+    /// ```
+    pub fn clear(&mut self) {
+        self.drain(..);
+    }
+    
     /// Removes the specified range from the slice in bulk, returning all
     /// removed elements as an iterator. If the iterator is dropped before
     /// being fully consumed, it drops the remaining removed elements.
