@@ -1,7 +1,53 @@
+//! This module provides the [`VecSlice`] struct, which represents a growable mutable reference on a [`Vec`].
+//! 
+//! The [`VecSlice`] struct allows you to work with a mutable slice of a [`Vec`] while ensuring memory safety by requiring a mutable reference to the underlying buffer, only one [`VecSlice`] can exist at a time, preventing multiple mutable references and potential data races.
+//! 
+//! # Complexity
+//! 
+//! All operations on a [`VecSlice`] have O(n) complexity, as the slice can start and end anywhere on the original vector.
+//! 
+//! If you use [`VecSlice::new_at_tail`] to create a slice, the complexity of push operations on the new slice will be O(1).
+//! 
+//! # Examples
+//!
+//! ```
+//! use vecslice::Slice;
+//!
+//! let mut vec = vec![1, 2, 3];
+//!
+//! // Create a VecSlice that slices the first two elements
+//! let mut slice = vec.vecslice(..2);
+//!
+//! // Perform operations on the slice
+//! assert_eq!(slice.len(), 2);
+//! assert_eq!(slice, [1, 2]);
+//! 
+//! slice.push_back(3);
+//! slice.push_front(0);
+//! 
+//! assert_eq!(slice, [0, 1, 2, 3]);
+//!
+//! // The original `Vec` is also modified
+//! assert_eq!(vec, [0, 1, 2, 3, 3]);
+//! 
+//! // Create a new VecSlice that slices [1, 2, 3]
+//! let mut slice = vec.vecslice(1..=3);
+//! 
+//! // Perform operations on the slice
+//! assert_eq!(slice.pop_back(), Some(3));
+//! assert_eq!(slice.pop_front(), Some(1));
+//! assert_eq!(slice, [2]);
+//! 
+//! // The original `Vec` is also modified
+//! assert_eq!(vec, [0, 2, 3]);
+//! 
+//! ```
+//! For more information, see the [`VecSlice`] struct documentation.
+
 use core::ops::RangeBounds;
 
-pub mod iter;
-pub mod index;
+mod iter;
+mod index;
 
 /// Growable mutable reference on a [`Vec`].
 /// 
@@ -11,21 +57,21 @@ pub mod index;
 /// 
 /// All operations have O(n) complexity, as the slice can start and end anywhere on the original vector.
 /// 
-/// If [`VecSlice::new_at_tail`] is used, the complexity of push operations will be O(1).
+/// If [`VecSlice::new_at_tail`] is used, the complexity of push_back operations on the new slice will be O(1).
 /// 
 /// # Examples
 /// 
 /// ```
 /// use vecslice::Slice;
 /// 
-/// let mut v = vec![1, 2, 3];
-/// let mut slice = v.vecslice(0..=1);
+/// let mut vec = vec![1, 2, 3];
+/// let mut slice = vec.vecslice(0..=1);
 /// assert_eq!(slice.len(), 2);
 /// assert_eq!(slice, [1, 2]);
 /// 
-/// slice.push(3);
+/// slice.push_back(3);
 /// assert_eq!(slice, [1, 2, 3]);
-/// assert_eq!(v, [1, 2, 3, 3]);
+/// assert_eq!(vec, [1, 2, 3, 3]);
 /// ```
 #[derive(Eq, Ord)]
 pub struct VecSlice<'a, T> {
@@ -69,7 +115,7 @@ impl<'a, T> VecSlice<'a, T> {
     /// 
     /// let mut slice2 = slice.new_at_tail();
     /// assert_eq!(slice2, []);
-    /// slice2.push(4);
+    /// slice2.push_back(4);
     /// assert_eq!(slice2, [4]);
     /// 
     /// assert_eq!(slice, [1, 2, 3]);
@@ -105,12 +151,12 @@ impl<'a, T> VecSlice<'a, T> {
     /// let mut vec = vec![0, 1, 2, 3];
     /// let mut slice = vec.vecslice(1..=2);
     /// assert_eq!(slice, [1, 2]);
-    /// slice.push(4);
-    /// slice.push(5);
+    /// slice.push_back(4);
+    /// slice.push_back(5);
     /// assert_eq!(slice, [1, 2, 4, 5]);
     /// assert_eq!(vec, [0, 1, 2, 4, 5, 3]);
     /// ```
-    pub fn push(&mut self, element: T) {
+    pub fn push_back(&mut self, element: T) {
         self.vec.insert(self.end, element);
         self.end += 1;
     }
@@ -176,32 +222,41 @@ impl<'a, T> VecSlice<'a, T> {
     /// # Examples
     ///
     /// ```
-    /// let mut vec = vec![1, 2, 3];
-    /// assert_eq!(vec.pop(), Some(3));
-    /// assert_eq!(vec, [1, 2]);
+    /// use vecslice::Slice;
+    /// 
+    /// let mut vec = vec![0, 1, 2, 3];
+    /// let mut slice = vec.vecslice(..=2);
+    /// assert_eq!(slice, [0, 1, 2]);
+    /// assert_eq!(slice.pop_back(), Some(2));
+    /// assert_eq!(slice, [0, 1]);
+    /// assert_eq!(vec, [0, 1, 3]);
     /// ```
-    pub fn pop(&mut self) -> Option<T> {
+    pub fn pop_back(&mut self) -> Option<T> {
         if !self.is_empty() {
             self.end -= 1;
-            Some(self.vec.remove(self.end-1))
+            Some(self.vec.remove(self.end))
         } else {
             None
         }
     }
 
-    /// Removes the last element from a VecSlice and returns it, or [`None`] if it
+    /// Removes the first element from a VecSlice and returns it, or [`None`] if it
     /// is empty.
     ///
-    /// If you'd like to pop the first element, use [`VecSlice::pop_front`] instead.
+    /// If you'd like to pop the last element, use [`VecSlice::pop_back`] instead.
     ///
-    /// [`VecSlice::pop_front`]: crate::VecSlice::pop_front
+    /// [`VecSlice::pop_back`]: crate::VecSlice::pop_back
     ///
     /// # Examples
     ///
     /// ```
-    /// let mut vec = vec![1, 2, 3];
-    /// assert_eq!(vec.pop(), Some(3));
-    /// assert_eq!(vec, [1, 2]);
+    /// use vecslice::Slice;
+    /// 
+    /// let mut vec = vec![0, 1, 2, 3];
+    /// let mut slice = vec.vecslice(1..);
+    /// assert_eq!(slice.pop_front(), Some(1));
+    /// assert_eq!(slice, [2, 3]);
+    /// assert_eq!(vec, [0, 2, 3]);
     /// ```
     pub fn pop_front(&mut self) -> Option<T> {
         if !self.is_empty() {
@@ -301,7 +356,6 @@ impl<'a, T> VecSlice<'a, T> {
     /// ```
     pub fn drain(&mut self, range: impl RangeBounds<usize>) -> std::vec::Drain<'_, T> {
         let (start, end) = Self::translate_range(range, self.start, self.end);
-        dbg!((start, end));
         self.end -= end - start; // Adjust length of the new slice
         self.vec.drain(start..end)
     }
@@ -445,9 +499,7 @@ pub trait Slice<T> {
 }
 
 impl<T> Slice<T> for Vec<T> {
-    /// Creates a new [`VecSlice`] on the 
-    /// 
-    /// The new slice will be empty, and newly added elements will be appended to the end of the [`VecSlice`].
+    /// Creates a new [`VecSlice`] of the [`Vec`] on the specified range.
     fn vecslice(&mut self, range: impl RangeBounds<usize>) -> VecSlice<T> {
         VecSlice::new(range, self)
     }
@@ -516,6 +568,18 @@ impl<T> core::borrow::Borrow<[T]> for VecSlice<'_, T> {
 
 impl<T> core::borrow::BorrowMut<[T]> for VecSlice<'_, T> {
     fn borrow_mut(&mut self) -> &mut [T] {
+        &mut self.vec[self.start..self.end]
+    }
+}
+
+impl<T> AsRef<[T]> for VecSlice<'_, T> {
+    fn as_ref(&self) -> &[T] {
+        &self.vec[self.start..self.end]
+    }
+}
+
+impl<T> AsMut<[T]> for VecSlice<'_, T> {
+    fn as_mut(&mut self) -> &mut [T] {
         &mut self.vec[self.start..self.end]
     }
 }
