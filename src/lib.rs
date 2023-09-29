@@ -44,7 +44,7 @@
 //! ```
 //! For more information, see the [`VecSlice`] struct documentation.
 
-use core::ops::RangeBounds;
+use core::{ops::{RangeBounds, Index}, slice::SlicePattern};
 
 mod iter;
 mod index;
@@ -74,12 +74,14 @@ mod index;
 /// assert_eq!(vec, [1, 2, 3, 3]);
 /// ```
 #[derive(Eq, Ord)]
-pub struct VecSlice<'a, T> {
+struct VecSlice<'a, T, S> where S: Slice<T> + ?Sized {
     start: usize,
     end: usize,
-    vec: &'a mut Vec<T>
+    original: &'a mut S,
+    _type: core::marker::PhantomData<T>,
 }
-impl<'a, T> VecSlice<'a, T> {
+
+impl<'a, T, S> VecSlice<'a, T, S> where S: Slice<T> + ?Sized {
     fn translate_range(range: impl RangeBounds<usize>, start: usize, end: usize) -> (usize, usize) {
         use core::ops::Bound::*;
         match (range.start_bound(), range.end_bound()) {
@@ -95,9 +97,9 @@ impl<'a, T> VecSlice<'a, T> {
         }
     }
 
-    pub fn new(range: impl RangeBounds<usize>, vec: &'a mut Vec<T>) -> VecSlice<'a, T> {
-        let (start, end) = VecSlice::<T>::translate_range(range, 0, vec.len());
-        VecSlice { start, end, vec }
+    pub fn new(range: impl core::ops::RangeBounds<usize>, original: &'a mut S) -> VecSlice<'a, T, S> {
+        let (start, end) = VecSlice::<T, S>::translate_range(range, 0, original.len());
+        VecSlice { start, end, original, _type: core::marker::PhantomData }
     }
     
     /// Creates a new [`VecSlice`] at the tail of the current one.
@@ -122,13 +124,40 @@ impl<'a, T> VecSlice<'a, T> {
     /// assert_eq!(vec, [1, 2, 3, 4]);
     /// ```
     pub fn new_at_tail(&mut self) -> VecSlice<'_, T> {
-        VecSlice::new(self.end.., self.vec)
+        VecSlice::new(self.end..self.end, self.vec)
     }
     
+    /// Creates a new [`VecSlice`] at the tail of the current one.
+    /// 
+    /// The new slice will be empty, and newly added elements will be appended to the end of the [`VecSlice`].
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use vecslice::Slice;
+    /// 
+    /// let mut vec = vec![1, 2, 3];
+    /// let mut slice = vec.vecslice(0..);
+    /// assert_eq!(slice, [1, 2, 3]);
+    /// 
+    /// let mut slice2 = slice.new_at_head();
+    /// assert_eq!(slice2, []);
+    /// slice2.push_back(4);
+    /// assert_eq!(slice2, [4]);
+    /// 
+    /// // assert_eq!(slice, [1, 2, 3]);
+    /// assert_eq!(vec, [4, 1, 2, 3]);
+    /// ```
+    pub fn new_at_head(&mut self) -> VecSlice<'_, T> {
+        VecSlice::new(self.start..self.start, self.vec)
+    }
+    
+    /// Returns the length of the slice.
     pub fn len(&self) -> usize {
         self.end - self.start
     }
-
+    
+    /// Returns `true` if the slice is empty.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -480,53 +509,101 @@ impl<'a, T> VecSlice<'a, T> {
     }
 }
 
-impl<T> Extend<T> for VecSlice<'_, T> {
+impl<T, S> Extend<T> for VecSlice<'_, T, S> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
-        self.vec.splice(self.end..self.end, iter);
+        self.original.splice(self.end..self.end, iter);
     }
 }
 
-impl<T: std::fmt::Debug> std::fmt::Debug for VecSlice<'_, T> {
+impl<T: std::fmt::Debug> std::fmt::Debug for VecSlice<'_, T, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("VecSlice").field("slice", &&self.vec[self.start..self.end]).field("start", &self.start).field("end", &self.end).field("vec", &self.vec).finish()
+        let v = self.into_iter().collect::<Vec<_>>();
+        f.debug_struct("VecSlice").field("slice", &v).field("start", &self.start).field("end", &self.end).field("vec", &self.vec).finish()
     }
 }
 
-pub trait Slice<T> {
-    fn vecslice(&mut self, range: impl RangeBounds<usize>) -> VecSlice<T>;
+trait Slice<T> {
+    fn vecslice(&mut self, range: impl core::ops::RangeBounds<usize>) -> VecSlice<'_, T, Self>;
+
+    fn vecslice_at_tail(&mut self) -> VecSlice<'_, T, Self> {
+        self.vecslice(self.len()..self.len())
+    }
+
+    fn vecslice_at_front(&mut self) -> VecSlice<'_, T, Self> {
+        self.vecslice(0..0)
+    }
     
-    fn vecslice_at_tail(&mut self) -> VecSlice<T>;
+    fn insert(&mut self, index: usize, element: T);
+
+    fn push_back(&mut self, element: T) {
+        self.insert(self.len(), element);
+    }
+
+    fn push_front(&mut self, element: T) {
+        self.insert(0, element);
+    }
+    
+    fn remove(&mut self, index: usize) -> T;
+
+    fn pop_back(&mut self) -> Option<T> {
+        if self.len() > 0 {
+            self.remove(self.len() - 1)
+        } else {
+            None
+        }
+        
+    }
+
+    fn pop_front(&mut self) -> Option<T> {
+        if self.len() > 0 {
+            self.remove(0)
+        } else {
+            None
+        }
+    }
+    
+    fn len(&self) -> usize;
+    
+    fn as_slice(&self) -> &[T];
 }
 
 impl<T> Slice<T> for Vec<T> {
-    /// Creates a new [`VecSlice`] of the [`Vec`] on the specified range.
-    fn vecslice(&mut self, range: impl RangeBounds<usize>) -> VecSlice<T> {
+    fn vecslice(&mut self, range: impl core::ops::RangeBounds<usize>) -> VecSlice<'_, T, Self> {
         VecSlice::new(range, self)
     }
     
-    /// Creates a new [`VecSlice`] at the tail of the [`Vec`].
-    /// 
-    /// The new slice will be empty, and newly added elements will be appended to the end of the [`Vec`].
-    fn vecslice_at_tail(&mut self) -> VecSlice<T> {
-        self.vecslice(self.len()..)
+    fn insert(&mut self, index: usize, element: T) {
+        self.insert(index, element)
+    }
+
+    fn remove(&mut self, index: usize) -> T {
+        self.remove(index)
+    }
+
+    fn len(&self) -> usize {
+        self.len()
+    }
+
+    fn as_slice(&self) -> &[T] {
+        self.as_slice()
     }
 }
 
-impl<T: PartialEq> PartialEq for VecSlice<'_, T> {
+impl<T, S, Rhs> PartialEq<Rhs> for VecSlice<'_, T, S> where T: PartialEq, S: Slice<T>, Rhs: Slice<T> {
     fn eq(&self, other: &Self) -> bool {
-        self.vec[self.start..self.end] == other.vec[other.start..other.end]
+        self.original.as_slice() == other.original.as_slice()
     }
 }
 
-impl<T: PartialOrd> PartialOrd for VecSlice<'_, T> {
+impl<T, S, Rhs> PartialOrd for VecSlice<'_, T, S> where T: PartialOrd, S: Slice<T>, Rhs: Slice<T> {
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        self.vec[self.start..self.end].partial_cmp(&other.vec[other.start..other.end])
+        self.original.as_slice().partial_cmp(other.original.as_slice())
     }
 }
 
-impl<T: PartialEq, const N: usize> PartialEq<[T; N]> for VecSlice<'_, T> {
+impl<T: PartialEq, const N: usize, S: Slice<T>> PartialEq<[T; N]> for VecSlice<'_, T, S> {
     fn eq(&self, other: &[T; N]) -> bool {
-        &self.vec[self.start..self.end] == other
+        &self.original.as_slice() == other
     }
 }
 
