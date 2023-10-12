@@ -1,31 +1,22 @@
-use crate::{VecSlice, Slice};
+use crate::{Slice, VecSlice};
 
-impl<T, S: Slice<T>> core::ops::Index<usize> for VecSlice<'_, T, S> {
-    type Output = T;
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.as_slice()[self.start+index]
-    }
-}
-
-impl<T, S: Slice<T>> core::ops::IndexMut<usize> for VecSlice<'_, T, S> {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.as_slice()[self.start+index]
-    }
-}
-
-impl<Idx: core::ops::RangeBounds<usize>, T, S: Slice<T>> core::ops::Index<Idx> for VecSlice<'_, T, S> {
+impl<Idx: core::ops::RangeBounds<usize>, T, S: Slice<T>> core::ops::Index<Idx>
+    for VecSlice<'_, T, S>
+{
     type Output = [T];
-    
-    fn index(&self, index: usize) -> &Self::Output {
+
+    fn index(&self, index: Idx) -> &Self::Output {
         let (start, end) = Self::translate_range(index, self.start, self.end);
         self.as_slice().index(start..end)
     }
 }
 
-impl<Idx: core::ops::RangeBounds<usize>, T, S: Slice<T>> core::ops::IndexMut<Idx> for VecSlice<'_, T, S> {
-    fn index_mut(&self, index: usize) -> &Self::Output {
+impl<Idx: core::ops::RangeBounds<usize>, T, S: Slice<T>> core::ops::IndexMut<Idx>
+    for VecSlice<'_, T, S>
+{
+    fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
         let (start, end) = Self::translate_range(index, self.start, self.end);
-        self.as_slice().index_mut(start..end)
+        self.as_mut_slice().index_mut(start..end)
     }
 }
 
@@ -123,7 +114,7 @@ impl<T> core::ops::IndexMut<core::ops::RangeToInclusive<usize>> for VecSlice<'_,
 
 impl<T> core::ops::Index<usize> for &VecSlice<'_, T> {
     type Output = T;
-    
+
     fn index(&self, index: usize) -> &Self::Output {
         &self.vec[self.start+index]
     }
@@ -181,7 +172,7 @@ impl<T> core::ops::Index<core::ops::RangeToInclusive<usize>> for &VecSlice<'_, T
 
 impl<T> core::ops::Index<usize> for &mut VecSlice<'_, T> {
     type Output = T;
-    
+
     fn index(&self, index: usize) -> &Self::Output {
         &self.vec[self.start+index]
     }

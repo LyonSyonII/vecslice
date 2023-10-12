@@ -22,7 +22,7 @@ test! {
     new_range_unbound1 => assert_eq!(vec![1].vecslice(..), [1])
     new_range_unbound2 => assert_eq!(vec![1, 2].vecslice(..), [1, 2])
     new_range_unbound3 => assert_eq!(vec![1, 2, 3].vecslice(..), [1, 2, 3])
-    
+
     new_range_unbound_left0 => assert_eq!(vec![0; 0].vecslice(..0), [])
     new_range_unbound_left1 => assert_eq!(vec![1].vecslice(..1), [1])
     new_range_unbound_left2 => assert_eq!(vec![1, 2].vecslice(..2), [1, 2])
@@ -37,13 +37,13 @@ test! {
     new_range0_excluded1 => assert_eq!(vec![1].vecslice(0..0), [])
     new_range0_excluded2 => assert_eq!(vec![1, 2].vecslice(0..0), [])
     new_range0_excluded3 => assert_eq!(vec![1, 2, 3].vecslice(0..0), [])
-    
+
     #[should_panic]
     new_range1_included0 => assert_eq!(vec![0; 0].vecslice(0..=0), [])
     new_range1_included1 => assert_eq!(vec![1].vecslice(0..=0), [1])
     new_range1_included2 => assert_eq!(vec![1, 2].vecslice(0..=0), [1])
     new_range1_included3 => assert_eq!(vec![1, 2, 3].vecslice(0..=0), [1])
-    
+
     #[should_panic]
     new_range1_excluded0 => assert_eq!(vec![0; 0].vecslice(0..1), [])
     new_range1_excluded1 => assert_eq!(vec![1].vecslice(0..1), [1])
