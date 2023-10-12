@@ -1,10 +1,14 @@
 macro_rules! test {
-    ( $( $(#[ $meta:meta ])* $name:ident => $code:expr )* ) => {
+    ( $start:ident = $slit:literal; $end:ident = $elit:literal; $i:ident; $( $(#[ $meta:meta ])* $name:ident => $code:expr )* ) => {
         $(
             #[test]
             $( #[$meta] )*
             fn $name() {
-                $code;
+                let $start = $slit;
+                let $end = $elit;
+                for $i in $start..$end {
+                    $code
+                }
             }
         )*
     }
@@ -13,10 +17,19 @@ macro_rules! test {
 use vecslice::Slice;
 
 test! {
-    new_tail0 => assert_eq!(vec![0; 0].vecslice_at_tail(), [])
-    new_tail1 => assert_eq!(vec![1].vecslice_at_tail(), [])
-    new_tail2 => assert_eq!(vec![1, 2].vecslice_at_tail(), [])
-    new_tail3 => assert_eq!(vec![1, 2, 3].vecslice_at_tail(), [])
+    start = 0u8;
+    end = 10u8;
+    i;
+
+    new_tail => {
+        let mut v = (start..i).collect::<Vec<_>>();
+        assert_eq!(v.vecslice_at_tail(), [], "i = {}", i);
+    }
+    
+    new_head0 => assert_eq!(vec![0; 0].vecslice_at_head(), [])
+    new_head1 => assert_eq!(vec![1].vecslice_at_head(), [])
+    new_head2 => assert_eq!(vec![1, 2].vecslice_at_head(), [])
+    new_head3 => assert_eq!(vec![1, 2, 3].vecslice_at_head(), [])
 
     new_range_unbound0 => assert_eq!(vec![0; 0].vecslice(..), [])
     new_range_unbound1 => assert_eq!(vec![1].vecslice(..), [1])
@@ -72,29 +85,14 @@ test! {
     empty_true => assert_eq!(vec![0; 0].vecslice(..).is_empty(), true)
     empty_false => assert_eq!(vec![1].vecslice(..).is_empty(), false)
 
-    push_back_tail_0 => {
-        let mut v = Vec::new();
+    push_back_tail => {
+        let mut v = (start..i).collect::<Vec<_>>();
         let mut s = v.vecslice_at_tail();
-        s.push_back(1);
-        s.push_back(2);
-        s.push_back(3);
-        assert_eq!(s, [1, 2, 3]);
-        assert_eq!(v, [1, 2, 3]);
-    }
-    push_back_tail_1 => {
-        let mut v = vec![1];
-        let mut s = v.vecslice_at_tail();
-        s.push_back(2);
-        s.push_back(3);
-        assert_eq!(s, [2, 3]);
-        assert_eq!(v, [1, 2, 3]);
-    }
-    push_back_tail_2 => {
-        let mut v = vec![1, 2];
-        let mut s = v.vecslice_at_tail();
-        s.push_back(3);
-        assert_eq!(s, [3]);
-        assert_eq!(v, [1, 2, 3]);
+        for i in i..end {
+            s.push_back(i)
+        }
+        assert_eq!(s, (i..end).collect::<Vec<_>>(), "i = {}", i);
+        assert_eq!(v, (start..end).collect::<Vec<_>>(), "i = {}", i);
     }
 
     push_back_front_0 => {

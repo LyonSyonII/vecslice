@@ -224,7 +224,7 @@ pub trait Slice<T> {
     /// let mut slice = vec.vecslice(0..);
     /// assert_eq!(slice, [1, 2, 3]);
     ///
-    /// let mut slice2 = slice.vecslice_at_front();
+    /// let mut slice2 = slice.vecslice_at_head();
     /// assert_eq!(slice2, []);
     /// slice2.push_back(4);
     /// assert_eq!(slice2, [4]);
@@ -232,7 +232,7 @@ pub trait Slice<T> {
     /// // assert_eq!(slice, [1, 2, 3]);
     /// assert_eq!(vec, [4, 1, 2, 3]);
     /// ```
-    fn vecslice_at_front(&mut self) -> VecSlice<'_, T, Self> {
+    fn vecslice_at_head(&mut self) -> VecSlice<'_, T, Self> {
         self.vecslice(0..0)
     }
     /// Inserts an element at position `index` within the slice, shifting all
@@ -667,63 +667,25 @@ impl<T> Slice<T> for Vec<T> {
     }
 }
 
-impl<T, S> PartialEq for VecSlice<'_, T, S>
+impl<T, S, Rhs> PartialEq<Rhs> for VecSlice<'_, T, S>
 where
     T: PartialEq,
     S: Slice<T>,
+    Rhs: AsRef<[T]>
 {
-    fn eq(&self, other: &Self) -> bool {
-        self.as_slice() == other.as_slice()
+    fn eq(&self, other: &Rhs) -> bool {
+        self.as_slice() == other.as_ref()
     }
 }
 
-impl<T, S> PartialOrd for VecSlice<'_, T, S>
+impl<T, S, Rhs> PartialOrd<Rhs> for VecSlice<'_, T, S>
 where
     T: PartialOrd,
     S: Slice<T>,
+    Rhs: AsRef<[T]>
 {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        self.as_slice().partial_cmp(other.as_slice())
-    }
-}
-
-impl<T, S, const N: usize> PartialEq<[T; N]> for VecSlice<'_, T, S>
-where
-    T: PartialEq,
-    S: Slice<T>,
-{
-    fn eq(&self, other: &[T; N]) -> bool {
-        self.as_slice() == other
-    }
-}
-
-impl<T, S, const N: usize> PartialOrd<[T; N]> for VecSlice<'_, T, S>
-where
-    T: PartialOrd,
-    S: Slice<T>,
-{
-    fn partial_cmp(&self, other: &[T; N]) -> Option<core::cmp::Ordering> {
-        self.as_slice().partial_cmp(other)
-    }
-}
-
-impl<T, S> PartialEq<&[T]> for VecSlice<'_, T, S>
-where
-    T: PartialEq,
-    S: Slice<T>,
-{
-    fn eq(&self, other: &&[T]) -> bool {
-        self.as_slice() == *other
-    }
-}
-
-impl<T, S> PartialOrd<&[T]> for VecSlice<'_, T, S>
-where
-    T: PartialOrd,
-    S: Slice<T>,
-{
-    fn partial_cmp(&self, other: &&[T]) -> Option<core::cmp::Ordering> {
-        self.as_slice().partial_cmp(other)
+    fn partial_cmp(&self, other: &Rhs) -> Option<core::cmp::Ordering> {
+        self.as_slice().partial_cmp(other.as_ref())
     }
 }
 
