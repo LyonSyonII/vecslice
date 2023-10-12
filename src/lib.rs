@@ -44,7 +44,7 @@
 //! ```
 //! For more information, see the [`VecSlice`] struct documentation.
 
-use core::{ops::{RangeBounds, Index}, slice::SlicePattern};
+use core::ops::RangeBounds;
 
 mod iter;
 mod index;
@@ -101,6 +101,62 @@ impl<'a, T, S> VecSlice<'a, T, S> where S: Slice<T> + ?Sized {
         let (start, end) = VecSlice::<T, S>::translate_range(range, 0, original.len());
         VecSlice { start, end, original, _type: core::marker::PhantomData }
     }
+}
+
+impl<'a, T, S> Slice<T> for VecSlice<'a, T, S> where S: Slice<T> + ?Sized {
+    type Drain = S::Drain<'a>;
+    
+    fn vecslice(&mut self, range: impl core::ops::RangeBounds<usize>) -> VecSlice<'_, T, Self> {
+        VecSlice::new(range, self)
+    }
+    
+    fn len(&self) -> usize {
+        self.end - self.start
+    }
+    
+    fn insert(&mut self, index: usize, element: T) {
+        assert!(index <= self.len());
+        self.original.insert(self.start+index, element);
+        self.end += 1;
+    }
+    
+    fn drain(&mut self, range: impl RangeBounds<usize>) -> Self::Drain<'_> {
+        let (start, end) = Self::translate_range(range, self.start, self.end);
+        self.end -= end - start; // Adjust length of the new slice
+        self.original.drain(start..end)
+    }
+    
+    fn as_slice(&self) -> &[T] {
+        &self.original.as_slice()[self.start..self.end]
+    }
+    
+    fn as_slice_mut(&mut self) -> &mut [T] {
+        &mut self.original.as_slice_mut()[self.start..self.end]
+    }
+}
+
+impl<T, S> Extend<T> for VecSlice<'_, T, S> where S: Slice<T> + Extend<T> {
+    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+        self.original.extend(iter)
+    }
+}
+
+impl<T: std::fmt::Debug, S: std::fmt::Debug + Slice<T>> std::fmt::Debug for VecSlice<'_, T, S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let v = self.as_slice();
+        f.debug_struct("VecSlice")
+            .field("slice", &v)
+            .field("start", &self.start)
+            .field("end", &self.end)
+            .field("original", &self.original)
+            .finish()
+    }
+}
+
+trait Slice<T> {
+    type Drain<'a>;
+
+    fn vecslice(&mut self, range: impl core::ops::RangeBounds<usize>) -> VecSlice<'_, T, Self>;
     
     /// Creates a new [`VecSlice`] at the tail of the current one.
     /// 
@@ -123,10 +179,9 @@ impl<'a, T, S> VecSlice<'a, T, S> where S: Slice<T> + ?Sized {
     /// assert_eq!(slice, [1, 2, 3]);
     /// assert_eq!(vec, [1, 2, 3, 4]);
     /// ```
-    pub fn new_at_tail(&mut self) -> VecSlice<'_, T> {
-        VecSlice::new(self.end..self.end, self.vec)
+    fn vecslice_at_tail(&mut self) -> VecSlice<'_, T, Self> {
+        self.vecslice(self.len()..self.len())
     }
-    
     /// Creates a new [`VecSlice`] at the tail of the current one.
     /// 
     /// The new slice will be empty, and newly added elements will be appended to the end of the [`VecSlice`].
@@ -148,20 +203,31 @@ impl<'a, T, S> VecSlice<'a, T, S> where S: Slice<T> + ?Sized {
     /// // assert_eq!(slice, [1, 2, 3]);
     /// assert_eq!(vec, [4, 1, 2, 3]);
     /// ```
-    pub fn new_at_head(&mut self) -> VecSlice<'_, T> {
-        VecSlice::new(self.start..self.start, self.vec)
+    fn vecslice_at_front(&mut self) -> VecSlice<'_, T, Self> {
+        self.vecslice(0..0)
     }
-    
-    /// Returns the length of the slice.
-    pub fn len(&self) -> usize {
-        self.end - self.start
-    }
-    
-    /// Returns `true` if the slice is empty.
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-    
+    /// Inserts an element at position `index` within the slice, shifting all
+    /// elements after it to the right.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index > len`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vecslice::Slice;
+    /// 
+    /// let mut vec = vec![0, 1, 2, 3];
+    /// let mut slice = vec.vecslice(1..=2);
+    /// assert_eq!(slice, [1, 2]);
+    /// slice.insert(1, 4);
+    /// assert_eq!(slice, [1, 4, 2]);
+    /// slice.insert(3, 5);
+    /// assert_eq!(slice, [1, 4, 2, 5]);
+    /// assert_eq!(vec, [0, 1, 4, 2, 5, 3]);
+    /// ```
+    fn insert(&mut self, index: usize, element: T);
     /// Appends an element to the back of a collection.
     /// 
     /// If you'd like to push at the front of the collection, use [`VecSlice::push_front`] instead.
@@ -185,11 +251,9 @@ impl<'a, T, S> VecSlice<'a, T, S> where S: Slice<T> + ?Sized {
     /// assert_eq!(slice, [1, 2, 4, 5]);
     /// assert_eq!(vec, [0, 1, 2, 4, 5, 3]);
     /// ```
-    pub fn push_back(&mut self, element: T) {
-        self.vec.insert(self.end, element);
-        self.end += 1;
+    fn push_back(&mut self, element: T) {
+        self.insert(self.len(), element);
     }
-
     /// Appends an element to the front of a collection.
     ///
     /// # Panics
@@ -209,93 +273,9 @@ impl<'a, T, S> VecSlice<'a, T, S> where S: Slice<T> + ?Sized {
     /// assert_eq!(slice, [5, 4, 1, 2]);
     /// assert_eq!(vec, [0, 5, 4, 1, 2, 3]);
     /// ```
-    pub fn push_front(&mut self, element: T) {
-        self.vec.insert(self.start, element);
-        self.end += 1;
+    fn push_front(&mut self, element: T) {
+        self.insert(0, element);
     }
-    
-    /// Inserts an element at position `index` within the slice, shifting all
-    /// elements after it to the right.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `index > len`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use vecslice::Slice;
-    /// 
-    /// let mut vec = vec![0, 1, 2, 3];
-    /// let mut slice = vec.vecslice(1..=2);
-    /// assert_eq!(slice, [1, 2]);
-    /// slice.insert(1, 4);
-    /// assert_eq!(slice, [1, 4, 2]);
-    /// slice.insert(3, 5);
-    /// assert_eq!(slice, [1, 4, 2, 5]);
-    /// assert_eq!(vec, [0, 1, 4, 2, 5, 3]);
-    /// ```
-    pub fn insert(&mut self, index: usize, element: T) {
-        assert!(index <= self.len());
-        self.vec.insert(self.start+index, element);
-        self.end += 1;
-    }
-    
-    /// Removes the last element from a VecSlice and returns it, or [`None`] if it
-    /// is empty.
-    ///
-    /// If you'd like to pop the first element, use [`VecSlice::pop_front`] instead.
-    ///
-    /// [`VecSlice::pop_front`]: crate::VecSlice::pop_front
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use vecslice::Slice;
-    /// 
-    /// let mut vec = vec![0, 1, 2, 3];
-    /// let mut slice = vec.vecslice(..=2);
-    /// assert_eq!(slice, [0, 1, 2]);
-    /// assert_eq!(slice.pop_back(), Some(2));
-    /// assert_eq!(slice, [0, 1]);
-    /// assert_eq!(vec, [0, 1, 3]);
-    /// ```
-    pub fn pop_back(&mut self) -> Option<T> {
-        if !self.is_empty() {
-            self.end -= 1;
-            Some(self.vec.remove(self.end))
-        } else {
-            None
-        }
-    }
-
-    /// Removes the first element from a VecSlice and returns it, or [`None`] if it
-    /// is empty.
-    ///
-    /// If you'd like to pop the last element, use [`VecSlice::pop_back`] instead.
-    ///
-    /// [`VecSlice::pop_back`]: crate::VecSlice::pop_back
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use vecslice::Slice;
-    /// 
-    /// let mut vec = vec![0, 1, 2, 3];
-    /// let mut slice = vec.vecslice(1..);
-    /// assert_eq!(slice.pop_front(), Some(1));
-    /// assert_eq!(slice, [2, 3]);
-    /// assert_eq!(vec, [0, 2, 3]);
-    /// ```
-    pub fn pop_front(&mut self) -> Option<T> {
-        if !self.is_empty() {
-            self.end -= 1;
-            Some(self.vec.remove(self.start))
-        } else {
-            None
-        }
-    }
-    
     /// Removes and returns the element at position `index` within the vector,
     /// shifting all elements after it to the left.
     ///
@@ -317,34 +297,59 @@ impl<'a, T, S> VecSlice<'a, T, S> where S: Slice<T> + ?Sized {
     /// assert_eq!(slice, [1]);
     /// assert_eq!(v, [1, 3]);
     /// ```
-    pub fn remove(&mut self, index: usize) -> T {
-        assert!(index <= self.len());
-        self.end -= 1;
-        self.vec.remove(self.start+index)
-    }
-    
-    /// Clears the slice, removing all values.
+    fn remove(&mut self, index: usize) -> T;
+    /// Removes the last element from a VecSlice and returns it, or [`None`] if it
+    /// is empty.
     ///
-    /// Note that this method has no effect on the allocated capacity
-    /// of the underlying vector.
+    /// If you'd like to pop the first element, use [`VecSlice::pop_front`] instead.
+    ///
+    /// [`VecSlice::pop_front`]: crate::VecSlice::pop_front
     ///
     /// # Examples
     ///
     /// ```
     /// use vecslice::Slice;
     /// 
-    /// let mut vec = vec![1, 2, 3];
-    /// let mut slice = vec.vecslice(1..);
-    ///
-    /// slice.clear();
-    ///
-    /// assert!(slice.is_empty());
-    /// assert_eq!(vec, [1]);
+    /// let mut vec = vec![0, 1, 2, 3];
+    /// let mut slice = vec.vecslice(..=2);
+    /// assert_eq!(slice, [0, 1, 2]);
+    /// assert_eq!(slice.pop_back(), Some(2));
+    /// assert_eq!(slice, [0, 1]);
+    /// assert_eq!(vec, [0, 1, 3]);
     /// ```
-    pub fn clear(&mut self) {
-        self.drain(..);
+    fn pop_back(&mut self) -> Option<T> {
+        if self.len() > 0 {
+            self.remove(self.len() - 1)
+        } else {
+            None
+        }
+        
     }
-    
+    /// Removes the first element from a VecSlice and returns it, or [`None`] if it
+    /// is empty.
+    ///
+    /// If you'd like to pop the last element, use [`VecSlice::pop_back`] instead.
+    ///
+    /// [`VecSlice::pop_back`]: crate::VecSlice::pop_back
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vecslice::Slice;
+    /// 
+    /// let mut vec = vec![0, 1, 2, 3];
+    /// let mut slice = vec.vecslice(1..);
+    /// assert_eq!(slice.pop_front(), Some(1));
+    /// assert_eq!(slice, [2, 3]);
+    /// assert_eq!(vec, [0, 2, 3]);
+    /// ```
+    fn pop_front(&mut self) -> Option<T> {
+        if self.len() > 0 {
+            self.remove(0)
+        } else {
+            None
+        }
+    }
     /// Removes the specified range from the slice in bulk, returning all
     /// removed elements as an iterator. If the iterator is dropped before
     /// being fully consumed, it drops the remaining removed elements.
@@ -383,12 +388,64 @@ impl<'a, T, S> VecSlice<'a, T, S> where S: Slice<T> + ?Sized {
     /// assert_eq!(slice, []);
     /// assert_eq!(vec, &[0, 5]);
     /// ```
-    pub fn drain(&mut self, range: impl RangeBounds<usize>) -> std::vec::Drain<'_, T> {
-        let (start, end) = Self::translate_range(range, self.start, self.end);
-        self.end -= end - start; // Adjust length of the new slice
-        self.vec.drain(start..end)
+    fn drain(&mut self, range: impl RangeBounds<usize>) -> Self::Drain<'_>;
+    /// Clears the slice, removing all values.
+    ///
+    /// Note that this method has no effect on the allocated capacity
+    /// of the underlying vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vecslice::Slice;
+    /// 
+    /// let mut vec = vec![1, 2, 3];
+    /// let mut slice = vec.vecslice(1..);
+    ///
+    /// slice.clear();
+    ///
+    /// assert!(slice.is_empty());
+    /// assert_eq!(vec, [1]);
+    /// ```
+    fn clear(&mut self) {
+        self.drain(..);
     }
     
+    /// Returns the length of the slice.
+    fn len(&self) -> usize;
+    /// Returns `true` if the slice is empty.
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+    /// Returns a reference to the underlying slice.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use vecslice::Slice;
+    /// 
+    /// let mut vec = vec![1, 2, 3];
+    /// let slice = vec.vecslice(0..2);
+    /// assert_eq!(slice, [1, 2]);
+    /// assert_eq!(slice.as_slice(), [1, 2]);
+    fn as_slice(&self) -> &[T];
+    /// Returns a mutable reference to the underlying slice.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use vecslice::Slice;
+    /// 
+    /// let mut vec = vec![1, 2, 3];
+    /// let mut slice = vec.vecslice(0..2);
+    /// assert_eq!(slice, [1, 2]);
+    /// let mut mut_slice = slice.as_slice_mut();
+    /// assert_eq!(mut_slice, [1, 2]);
+    /// mut_slice[0] = 4;
+    /// assert_eq!(mut_slice, [4, 2]);
+    /// assert_eq!(slice, [4, 2]);
+    /// assert_eq!(vec, [4, 2, 3]);
+    fn as_slice_mut(&mut self) -> &mut [T];
     /// Copies `self` into a new `Vec`.
     ///
     /// # Examples
@@ -403,10 +460,9 @@ impl<'a, T, S> VecSlice<'a, T, S> where S: Slice<T> + ?Sized {
     /// assert_eq!(v, [1, 2, 3]);
     /// // Here, `s` and `v` can be modified independently.
     /// ```
-    pub fn to_vec(&self) -> Vec<T> where T: Clone {
-        self.vec[self.start..self.end].to_vec()
+    fn to_vec(&self) -> Vec<T> where T: Clone {
+        self.as_slice().to_vec()
     }
-    
     /// Consumes `self` into a new `Vec`.
     ///
     /// # Examples
@@ -421,43 +477,8 @@ impl<'a, T, S> VecSlice<'a, T, S> where S: Slice<T> + ?Sized {
     /// assert_eq!(vec, [1, 2, 3]);
     /// // Here, `s` and `v` can be modified independently.
     /// ```
-    pub fn into_vec(self) -> Vec<T> where T: Clone {
-        self.vec[self.start..self.end].to_vec()
-    }
-    
-    /// Returns a reference to the underlying slice.
-    /// 
-    /// # Examples
-    /// 
-    /// ```
-    /// use vecslice::Slice;
-    /// 
-    /// let mut vec = vec![1, 2, 3];
-    /// let slice = vec.vecslice(0..2);
-    /// assert_eq!(slice, [1, 2]);
-    /// assert_eq!(slice.as_slice(), [1, 2]);
-    pub fn as_slice(&self) -> &[T] {
-        &self.vec[self.start..self.end]
-    }
-
-    /// Returns a mutable reference to the underlying slice.
-    /// 
-    /// # Examples
-    /// 
-    /// ```
-    /// use vecslice::Slice;
-    /// 
-    /// let mut vec = vec![1, 2, 3];
-    /// let mut slice = vec.vecslice(0..2);
-    /// assert_eq!(slice, [1, 2]);
-    /// let mut mut_slice = slice.as_mut_slice();
-    /// assert_eq!(mut_slice, [1, 2]);
-    /// mut_slice[0] = 4;
-    /// assert_eq!(mut_slice, [4, 2]);
-    /// assert_eq!(slice, [4, 2]);
-    /// assert_eq!(vec, [4, 2, 3]);
-    pub fn as_mut_slice(&mut self) -> &mut [T] {
-        &mut self.vec[self.start..self.end]
+    fn into_vec(self) -> Vec<T> {
+        self.into_iter().collect()
     }
     
     /// Sorts the slice.
@@ -480,8 +501,8 @@ impl<'a, T, S> VecSlice<'a, T, S> where S: Slice<T> + ?Sized {
     /// assert_eq!(slice, [-3, 2, 4]);
     /// assert_eq!(vec, [-5, -3, 2, 4, 1]);
     /// ```
-    pub fn sort(&mut self) where T: Ord {
-        self.vec[self.start..self.end].sort();
+    fn sort(&mut self) where T: Ord {
+        self.as_slice_mut().sort()
     }
     
     /// Sorts the slice, but might not preserve the order of equal elements.
@@ -504,67 +525,9 @@ impl<'a, T, S> VecSlice<'a, T, S> where S: Slice<T> + ?Sized {
     /// assert_eq!(slice, [-3, 2, 4]);
     /// assert_eq!(vec, [-5, -3, 2, 4, 1]);
     /// ```
-    pub fn sort_unstable(&mut self) where T: Ord {
-        self.vec[self.start..self.end].sort_unstable();
+    fn sort_unstable(&mut self) where T: Ord {
+        self.as_slice_mut().sort_unstable()
     }
-}
-
-impl<T, S> Extend<T> for VecSlice<'_, T, S> {
-    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
-        self.original.splice(self.end..self.end, iter);
-    }
-}
-
-impl<T: std::fmt::Debug> std::fmt::Debug for VecSlice<'_, T, S> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let v = self.into_iter().collect::<Vec<_>>();
-        f.debug_struct("VecSlice").field("slice", &v).field("start", &self.start).field("end", &self.end).field("vec", &self.vec).finish()
-    }
-}
-
-trait Slice<T> {
-    fn vecslice(&mut self, range: impl core::ops::RangeBounds<usize>) -> VecSlice<'_, T, Self>;
-
-    fn vecslice_at_tail(&mut self) -> VecSlice<'_, T, Self> {
-        self.vecslice(self.len()..self.len())
-    }
-
-    fn vecslice_at_front(&mut self) -> VecSlice<'_, T, Self> {
-        self.vecslice(0..0)
-    }
-    
-    fn insert(&mut self, index: usize, element: T);
-
-    fn push_back(&mut self, element: T) {
-        self.insert(self.len(), element);
-    }
-
-    fn push_front(&mut self, element: T) {
-        self.insert(0, element);
-    }
-    
-    fn remove(&mut self, index: usize) -> T;
-
-    fn pop_back(&mut self) -> Option<T> {
-        if self.len() > 0 {
-            self.remove(self.len() - 1)
-        } else {
-            None
-        }
-        
-    }
-
-    fn pop_front(&mut self) -> Option<T> {
-        if self.len() > 0 {
-            self.remove(0)
-        } else {
-            None
-        }
-    }
-    
-    fn len(&self) -> usize;
-    
-    fn as_slice(&self) -> &[T];
 }
 
 impl<T> Slice<T> for Vec<T> {
@@ -587,76 +550,68 @@ impl<T> Slice<T> for Vec<T> {
     fn as_slice(&self) -> &[T] {
         self.as_slice()
     }
+
+    fn as_slice_mut(&mut self) -> &mut [T] {
+        self.as_slice_mut()
+    }
 }
 
-impl<T, S, Rhs> PartialEq<Rhs> for VecSlice<'_, T, S> where T: PartialEq, S: Slice<T>, Rhs: Slice<T> {
+impl<T, S> PartialEq for S where T: PartialEq, S: Slice<T> {
     fn eq(&self, other: &Self) -> bool {
-        self.original.as_slice() == other.original.as_slice()
+        self.as_slice() == other.as_slice()
     }
 }
 
-impl<T, S, Rhs> PartialOrd for VecSlice<'_, T, S> where T: PartialOrd, S: Slice<T>, Rhs: Slice<T> {
+impl<T, S> PartialOrd for S where T: PartialOrd, S: Slice<T> {
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        self.original.as_slice().partial_cmp(other.original.as_slice())
+        self.as_slice().partial_cmp(other.as_slice())
     }
 }
 
-impl<T: PartialEq, const N: usize, S: Slice<T>> PartialEq<[T; N]> for VecSlice<'_, T, S> {
+impl<T, S, const N: usize> PartialEq<[T; N]> for S where T: PartialEq, S: Slice<T>, {
     fn eq(&self, other: &[T; N]) -> bool {
-        &self.original.as_slice() == other
+        &self.as_slice() == other
     }
 }
 
-impl<T: PartialOrd, const N: usize> PartialOrd<[T; N]> for VecSlice<'_, T> {
+impl<T, S, const N: usize> PartialOrd<[T; N]> for S where T: PartialOrd, S: Slice<T> {
     fn partial_cmp(&self, other: &[T; N]) -> Option<core::cmp::Ordering> {
-        self.vec[self.start..self.end].partial_cmp(other)
+        self.as_slice().partial_cmp(other)
     }
 }
 
-impl<T: PartialEq> PartialEq<&[T]> for VecSlice<'_, T> {
+impl<T, S> PartialEq<&[T]> for S where T: PartialEq, S: Slice<T> {
     fn eq(&self, other: &&[T]) -> bool {
-        &self.vec[self.start..self.end] == *other
+        self.as_slice() == other
     }
 }
 
-impl<T: PartialOrd> PartialOrd<&[T]> for VecSlice<'_, T> {
+impl<T, S> PartialOrd<&[T]> for S where T: PartialOrd, S: Slice<T> {
     fn partial_cmp(&self, other: &&[T]) -> Option<core::cmp::Ordering> {
-        self.vec[self.start..self.end].partial_cmp(other)
+        self.as_slice().partial_cmp(other)
     }
 }
 
-impl<T: PartialEq> PartialEq<Vec<T>> for VecSlice<'_, T> {
-    fn eq(&self, other: &Vec<T>) -> bool {
-        &self.vec[self.start..self.end] == other
-    }
-}
-
-impl<T: PartialOrd> PartialOrd<Vec<T>> for VecSlice<'_, T> {
-    fn partial_cmp(&self, other: &Vec<T>) -> Option<core::cmp::Ordering> {
-        self.vec[self.start..self.end].partial_cmp(other)
-    }
-}
-
-impl<T> core::borrow::Borrow<[T]> for VecSlice<'_, T> {
+impl<T, S: Slice<T>> core::borrow::Borrow<[T]> for S {
     fn borrow(&self) -> &[T] {
-        &self.vec[self.start..self.end]
+        self.as_slice()
     }
 }
 
-impl<T> core::borrow::BorrowMut<[T]> for VecSlice<'_, T> {
+impl<T, S: Slice<T>> core::borrow::BorrowMut<[T]> for S {
     fn borrow_mut(&mut self) -> &mut [T] {
-        &mut self.vec[self.start..self.end]
+        self.as_slice_mut()
     }
 }
 
-impl<T> AsRef<[T]> for VecSlice<'_, T> {
+impl<T, S: Slice<T>> AsRef<[T]> for S {
     fn as_ref(&self) -> &[T] {
-        &self.vec[self.start..self.end]
+        self.as_slice()
     }
 }
 
-impl<T> AsMut<[T]> for VecSlice<'_, T> {
+impl<T, S: Slice<T>> AsMut<[T]> for S {
     fn as_mut(&mut self) -> &mut [T] {
-        &mut self.vec[self.start..self.end]
+        self.as_slice_mut()
     }
 }
