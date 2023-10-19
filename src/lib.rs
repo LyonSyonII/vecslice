@@ -50,7 +50,10 @@ mod index;
 mod iter;
 
 #[allow(clippy::len_without_is_empty)]
-pub trait Slice<T> where Self: AsRef<[T]> + AsMut<[T]> + Sized {
+pub trait Slice<T>
+where
+    Self: AsRef<[T]> + AsMut<[T]> + Sized,
+{
     type Drain<'b>
     where
         Self: 'b;
@@ -406,9 +409,8 @@ where
     pub fn to_vec(&self) -> Vec<T>
     where
         T: Clone,
-        S: Sized
     {
-        self.iter().cloned().collect()
+        self.as_ref().to_vec()
     }
     /// Consumes `self` into a new `Vec`.
     ///
@@ -426,9 +428,9 @@ where
     /// ```
     pub fn into_vec(self) -> Vec<T>
     where
-        Self: Sized + IntoIterator<Item = T>,
+        T: Clone,
     {
-        self.into_iter().collect()
+        self.as_ref().to_vec()
     }
     /// Sorts the slice.
     ///
@@ -452,7 +454,7 @@ where
     /// ```
     pub fn sort(&mut self)
     where
-        T: Ord
+        T: Ord,
     {
         self.as_mut().sort()
     }
@@ -479,7 +481,7 @@ where
     /// ```
     pub fn sort_unstable(&mut self)
     where
-        T: Ord
+        T: Ord,
     {
         self.as_mut().sort_unstable()
     }
@@ -565,7 +567,7 @@ where
         self.end -= 1;
         self.original.remove(self.start + index)
     }
-    
+
     fn drain(&mut self, range: impl RangeBounds<usize>) -> Self::Drain<'_> {
         let (start, end) = Self::translate_range(range, self.start, self.end);
         assert!(start <= self.end && end <= self.end, "range out of bounds");
@@ -646,7 +648,7 @@ impl<T, S: Slice<T>> AsMut<[T]> for VecSlice<'_, T, S> {
 
 impl<T> Slice<T> for Vec<T> {
     type Drain<'b> = std::vec::Drain<'b, T> where T: 'b;
-    
+
     fn insert(&mut self, index: usize, element: T) {
         self.insert(index, element)
     }
@@ -654,11 +656,11 @@ impl<T> Slice<T> for Vec<T> {
     fn remove(&mut self, index: usize) -> T {
         self.remove(index)
     }
-    
+
     fn drain(&mut self, range: impl RangeBounds<usize>) -> Self::Drain<'_> {
         self.drain(range)
     }
-    
+
     fn len(&self) -> usize {
         self.len()
     }

@@ -1,6 +1,9 @@
 use crate::{Slice, VecSlice};
 
-struct Iter<'a, T, S> where S: Slice<T> {
+struct Iter<'a, T, S>
+where
+    S: Slice<T>,
+{
     slice: &'a VecSlice<'a, T, S>,
 }
 
