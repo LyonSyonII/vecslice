@@ -646,6 +646,15 @@ impl<T, S: Slice<T>> AsMut<[T]> for VecSlice<'_, T, S> {
     }
 }
 
+impl<'a, T, S> From<&'a mut S> for VecSlice<'a, T, S>
+where
+    S: Slice<T>,
+{
+    fn from(original: &'a mut S) -> Self {
+        Self::new(.., original)
+    }
+}
+
 impl<T> Slice<T> for Vec<T> {
     type Drain<'b> = std::vec::Drain<'b, T> where T: 'b;
 

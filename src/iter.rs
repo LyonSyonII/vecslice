@@ -1,12 +1,5 @@
 use crate::{Slice, VecSlice};
 
-struct Iter<'a, T, S>
-where
-    S: Slice<T>,
-{
-    slice: &'a VecSlice<'a, T, S>,
-}
-
 impl<'a, T, S> IntoIterator for &'a VecSlice<'_, T, S>
 where
     S: Slice<T>,
@@ -28,14 +21,5 @@ where
 
     fn into_iter(self) -> Self::IntoIter {
         self.as_mut().iter_mut()
-    }
-}
-
-impl<'a, T, S> From<&'a mut S> for VecSlice<'a, T, S>
-where
-    S: Slice<T>,
-{
-    fn from(original: &'a mut S) -> Self {
-        Self::new(.., original)
     }
 }
