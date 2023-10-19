@@ -14,7 +14,7 @@ macro_rules! test {
     }
 }
 
-use vecslice::Slice;
+use vecslice::{Slice, VecSlice};
 
 test! {
     start = 0u8;
@@ -76,6 +76,14 @@ test! {
     new_range2_excluded1 => assert_eq!(vec![1].vecslice(0..2), [])
     new_range2_excluded2 => assert_eq!(vec![1, 2].vecslice(0..2), [1, 2])
     new_range2_excluded3 => assert_eq!(vec![1, 2, 3].vecslice(0..2), [1, 2])
+
+    new_recursive => {
+        // Should compile
+        let mut v = vec![0i32; 0];
+        let mut s: VecSlice<'_, i32, Vec<i32>> = v.vecslice_at_head();
+        let mut s: VecSlice<'_, i32, VecSlice<'_, i32, Vec<i32>>> = s.vecslice_at_head();
+        let _: VecSlice<'_, i32, VecSlice<'_, i32, VecSlice<'_, i32, Vec<i32>>>> = s.vecslice_at_head();
+    }
 
     len0 => assert_eq!(vec![0; 0].vecslice(..).len(), 0)
     len1 => assert_eq!(vec![1].vecslice(..).len(), 1)

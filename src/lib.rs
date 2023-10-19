@@ -544,6 +544,10 @@ where
     pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, T> {
         self.as_mut().iter_mut()
     }
+    /// Consumes `self` and returns the original slice.
+    pub fn into_original(self) -> &'a mut S {
+        self.original
+    }
 }
 
 impl<'a, T, S> Slice<T> for VecSlice<'a, T, S>
