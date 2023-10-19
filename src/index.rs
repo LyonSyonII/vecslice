@@ -7,7 +7,7 @@ impl<Idx: core::ops::RangeBounds<usize>, T, S: Slice<T>> core::ops::Index<Idx>
 
     fn index(&self, index: Idx) -> &Self::Output {
         let (start, end) = Self::translate_range(index, self.start, self.end);
-        self.as_slice().index(start..end)
+        self.as_ref().index(start..end)
     }
 }
 
@@ -16,7 +16,7 @@ impl<Idx: core::ops::RangeBounds<usize>, T, S: Slice<T>> core::ops::IndexMut<Idx
 {
     fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
         let (start, end) = Self::translate_range(index, self.start, self.end);
-        self.as_mut_slice().index_mut(start..end)
+        self.as_mut().index_mut(start..end)
     }
 }
 

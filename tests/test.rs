@@ -25,7 +25,7 @@ test! {
         let mut v = (start..i).collect::<Vec<_>>();
         assert_eq!(v.vecslice_at_tail(), [], "i = {}", i);
     }
-    
+
     new_head0 => assert_eq!(vec![0; 0].vecslice_at_head(), [])
     new_head1 => assert_eq!(vec![1].vecslice_at_head(), [])
     new_head2 => assert_eq!(vec![1, 2].vecslice_at_head(), [])
@@ -89,7 +89,7 @@ test! {
         let mut v = (start..i).collect::<Vec<_>>();
         let mut s = v.vecslice_at_tail();
         for i in i..end {
-            s.push_back(i)
+            s.push_back(i);
         }
         assert_eq!(s, (i..end).collect::<Vec<_>>(), "i = {}", i);
         assert_eq!(v, (start..end).collect::<Vec<_>>(), "i = {}", i);
