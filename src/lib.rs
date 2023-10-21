@@ -411,7 +411,10 @@ impl<'a, T> VecSlice<'a, T> {
     /// assert_eq!(slice, []);
     /// assert_eq!(vec, &[0, 5]);
     /// ```
-    pub fn drain<'borrow>(&'borrow mut self, range: impl RangeBounds<usize>) -> crate::drain::Drain<'a, 'borrow, T> {
+    pub fn drain<'borrow>(
+        &'borrow mut self,
+        range: impl RangeBounds<usize>,
+    ) -> crate::drain::Drain<'a, 'borrow, T> {
         crate::drain::Drain::new(self, range)
     }
     /// Clears the slice, removing all values.

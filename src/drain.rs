@@ -1,4 +1,4 @@
-use crate::{Slice, Sliceable, VecSlice};
+use crate::VecSlice;
 
 pub struct Drain<'slice, 'borrow, T> {
     original: &'borrow mut VecSlice<'slice, T>,
@@ -24,7 +24,7 @@ impl<'slice, 'borrow, T> Drain<'slice, 'borrow, T> {
 
 impl<T> Iterator for Drain<'_, '_, T> {
     type Item = T;
-    
+
     fn next(&mut self) -> Option<Self::Item> {
         debug_assert!(self.start + self.elements <= self.original.len());
         if self.elements > 0 {
