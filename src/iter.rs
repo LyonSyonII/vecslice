@@ -1,9 +1,6 @@
 use crate::{Slice, VecSlice};
 
-impl<'a, T, S> IntoIterator for &'a VecSlice<'_, T, S>
-where
-    S: Slice<T>,
-{
+impl<'a, T> IntoIterator for &'a VecSlice<'_, T> {
     type Item = &'a T;
     type IntoIter = std::slice::Iter<'a, T>;
 
@@ -12,10 +9,7 @@ where
     }
 }
 
-impl<'a, T, S> IntoIterator for &'a mut VecSlice<'_, T, S>
-where
-    S: Slice<T>,
-{
+impl<'a, T> IntoIterator for &'a mut VecSlice<'_, T> {
     type Item = &'a mut T;
     type IntoIter = std::slice::IterMut<'a, T>;
 

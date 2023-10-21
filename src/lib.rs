@@ -46,22 +46,48 @@
 
 use core::ops::RangeBounds;
 
+mod drain;
 mod index;
 mod iter;
 
-#[allow(clippy::len_without_is_empty)]
-pub trait Slice<T>
+/// Growable mutable reference on a [`Vec`].
+///
+/// Due to requiring a mutable reference to the underlying buffer, only one [`VecSlice`] can exist at a time, ensuring memory safety.
+///
+/// # Complexity
+///
+/// All operations have O(n) complexity, as the slice can start and end anywhere on the original vector.
+///
+/// If [`VecSlice::new_at_tail`] is used, the complexity of push_back operations on the new slice will be O(1).
+///
+/// # Examples
+///
+/// ```
+/// use vecslice::Slice;
+///
+/// let mut vec = vec![1, 2, 3];
+/// let mut slice = vec.vecslice(0..=1);
+/// assert_eq!(slice.len(), 2);
+/// assert_eq!(slice, [1, 2]);
+///
+/// slice.push_back(3);
+/// assert_eq!(slice, [1, 2, 3]);
+/// assert_eq!(vec, [1, 2, 3, 3]);
+/// ```
+// #[derive(Eq, Ord)]
+pub struct VecSlice<'a, T> {
+    start: usize,
+    end: usize,
+    original: &'a mut dyn Sliceable<T>,
+}
+
+pub trait Slice<T>: Sliceable<T>
 where
-    Self: AsRef<[T]> + AsMut<[T]> + Sized,
+    Self: Sized,
 {
-    type Drain<'b>
-    where
-        Self: 'b;
-
-    fn vecslice(&mut self, range: impl core::ops::RangeBounds<usize>) -> VecSlice<'_, T, Self> {
-        VecSlice::new(range, self)
+    fn vecslice(&mut self, range: impl core::ops::RangeBounds<usize>) -> VecSlice<'_, T> {
+        VecSlice::new(range, self as &mut dyn Sliceable<T>)
     }
-
     /// Creates a new [`VecSlice`] at the tail of the current one.
     ///
     /// The new slice will be empty, and newly added elements will be appended to the end of the [`VecSlice`].
@@ -83,7 +109,7 @@ where
     /// assert_eq!(slice, [1, 2, 3, 4]);
     /// assert_eq!(vec, [1, 2, 3, 4]);
     /// ```
-    fn vecslice_at_tail(&mut self) -> VecSlice<'_, T, Self> {
+    fn vecslice_at_tail(&mut self) -> VecSlice<'_, T> {
         self.vecslice(self.len()..self.len())
     }
     /// Creates a new [`VecSlice`] at the tail of the current one.
@@ -107,9 +133,15 @@ where
     /// // assert_eq!(slice, [1, 2, 3]);
     /// assert_eq!(vec, [4, 1, 2, 3]);
     /// ```
-    fn vecslice_at_head(&mut self) -> VecSlice<'_, T, Self> {
+    fn vecslice_at_head(&mut self) -> VecSlice<'_, T> {
         self.vecslice(0..0)
     }
+}
+
+impl<T, S> Slice<T> for S where S: Sliceable<T> {}
+
+#[allow(clippy::len_without_is_empty)]
+pub trait Sliceable<T>: AsRef<[T]> + AsMut<[T]> {
     /// Inserts an element at position `index` within the slice, shifting all
     /// elements after it to the right.
     ///
@@ -154,88 +186,11 @@ where
     /// assert_eq!(v, [1, 3]);
     /// ```
     fn remove(&mut self, index: usize) -> T;
-    /// Removes the specified range from the slice in bulk, returning all
-    /// removed elements as an iterator. If the iterator is dropped before
-    /// being fully consumed, it drops the remaining removed elements.
-    ///
-    /// The returned iterator keeps a mutable borrow on the vector to optimize
-    /// its implementation.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the starting point is greater than the end point or if
-    /// the end point is greater than the length of the vector.
-    ///
-    /// # Leaking
-    ///
-    /// If the returned iterator goes out of scope without being dropped (due to
-    /// [`mem::forget`], for example), the vector may have lost and leaked
-    /// elements arbitrarily, including elements outside the range.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use vecslice::Slice;
-    ///
-    /// let mut vec = vec![0, 1, 2, 3, 4, 5];
-    /// let mut slice = vec.vecslice(2..);
-    /// assert_eq!(slice, [2, 3, 4, 5]);
-    /// let u: Vec<_> = slice.drain(1..=2).collect();
-    /// assert_eq!(slice, [2, 5]);
-    /// assert_eq!(u, &[3, 4]);
-    ///
-    /// assert_eq!(vec, &[0, 1, 2, 5]);
-    ///
-    /// let mut slice = vec.vecslice(1..=2);
-    /// assert_eq!(slice, [1, 2]);
-    /// slice.drain(..);
-    /// assert_eq!(slice, []);
-    /// assert_eq!(vec, &[0, 5]);
-    /// ```
-    fn drain(&mut self, range: impl RangeBounds<usize>) -> Self::Drain<'_>;
     /// Returns the length of the slice.
     fn len(&self) -> usize;
 }
 
-/// Growable mutable reference on a [`Vec`].
-///
-/// Due to requiring a mutable reference to the underlying buffer, only one [`VecSlice`] can exist at a time, ensuring memory safety.
-///
-/// # Complexity
-///
-/// All operations have O(n) complexity, as the slice can start and end anywhere on the original vector.
-///
-/// If [`VecSlice::new_at_tail`] is used, the complexity of push_back operations on the new slice will be O(1).
-///
-/// # Examples
-///
-/// ```
-/// use vecslice::Slice;
-///
-/// let mut vec = vec![1, 2, 3];
-/// let mut slice = vec.vecslice(0..=1);
-/// assert_eq!(slice.len(), 2);
-/// assert_eq!(slice, [1, 2]);
-///
-/// slice.push_back(3);
-/// assert_eq!(slice, [1, 2, 3]);
-/// assert_eq!(vec, [1, 2, 3, 3]);
-/// ```
-// #[derive(Eq, Ord)]
-pub struct VecSlice<'a, T, S>
-where
-    S: Slice<T>,
-{
-    start: usize,
-    end: usize,
-    original: &'a mut S,
-    _type: core::marker::PhantomData<T>,
-}
-
-impl<'a, T, S> VecSlice<'a, T, S>
-where
-    S: Slice<T>,
-{
+impl<'a, T> VecSlice<'a, T> {
     fn translate_range(range: impl RangeBounds<usize>, start: usize, end: usize) -> (usize, usize) {
         use core::ops::Bound::*;
         match (range.start_bound(), range.end_bound()) {
@@ -253,17 +208,42 @@ where
 
     pub fn new(
         range: impl core::ops::RangeBounds<usize>,
-        original: &'a mut S,
-    ) -> VecSlice<'a, T, S> {
-        let (start, end) = VecSlice::<T, S>::translate_range(range, 0, original.len());
+        original: &'a mut dyn Sliceable<T>,
+    ) -> VecSlice<'a, T> {
+        let (start, end) = VecSlice::<T>::translate_range(range, 0, original.len());
         VecSlice {
             start,
             end,
             original,
-            _type: core::marker::PhantomData,
         }
     }
 
+    /// Inserts an element at position `index` within the slice, shifting all
+    /// elements after it to the right.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index > len`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vecslice::Slice;
+    ///
+    /// let mut vec = vec![0, 1, 2, 3];
+    /// let mut slice = vec.vecslice(1..=2);
+    /// assert_eq!(slice, [1, 2]);
+    /// slice.insert(1, 4);
+    /// assert_eq!(slice, [1, 4, 2]);
+    /// slice.insert(3, 5);
+    /// assert_eq!(slice, [1, 4, 2, 5]);
+    /// assert_eq!(vec, [0, 1, 4, 2, 5, 3]);
+    /// ```
+    pub fn insert(&mut self, index: usize, value: T) {
+        assert!(index <= self.len());
+        self.original.insert(self.start + index, value);
+        self.end += 1;
+    }
     /// Appends an element to the back of a collection.
     ///
     /// If you'd like to push at the front of the collection, use [`VecSlice::push_front`] instead.
@@ -316,6 +296,32 @@ where
     pub fn push_front(&mut self, element: T) {
         self.insert(0, element);
     }
+    /// Removes and returns the element at position `index` within the vector,
+    /// shifting all elements after it to the left.
+    ///
+    /// Note: Because this shifts over the remaining elements, it has a
+    /// worst-case performance of *O*(*n*).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index > len`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vecslice::Slice;
+    ///
+    /// let mut v = vec![1, 2, 3];
+    /// let mut slice = v.vecslice(0..2);
+    /// assert_eq!(slice.remove(1), 2);
+    /// assert_eq!(slice, [1]);
+    /// assert_eq!(v, [1, 3]);
+    /// ```
+    pub fn remove(&mut self, index: usize) -> T {
+        assert!(index <= self.len());
+        self.end -= 1;
+        self.original.remove(self.start + index)
+    }
     /// Removes the last element from a VecSlice and returns it, or [`None`] if it
     /// is empty.
     ///
@@ -366,6 +372,47 @@ where
         } else {
             None
         }
+    }
+    /// Removes the specified range from the slice in bulk, returning all
+    /// removed elements as an iterator. If the iterator is dropped before
+    /// being fully consumed, it drops the remaining removed elements.
+    ///
+    /// The returned iterator keeps a mutable borrow on the vector to optimize
+    /// its implementation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the starting point is greater than the end point or if
+    /// the end point is greater than the length of the vector.
+    ///
+    /// # Leaking
+    ///
+    /// If the returned iterator goes out of scope without being dropped (due to
+    /// [`mem::forget`], for example), the vector may have lost and leaked
+    /// elements arbitrarily, including elements outside the range.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vecslice::Slice;
+    ///
+    /// let mut vec = vec![0, 1, 2, 3, 4, 5];
+    /// let mut slice = vec.vecslice(2..);
+    /// assert_eq!(slice, [2, 3, 4, 5]);
+    /// let u: Vec<_> = slice.drain(1..=2).collect();
+    /// assert_eq!(slice, [2, 5]);
+    /// assert_eq!(u, &[3, 4]);
+    ///
+    /// assert_eq!(vec, &[0, 1, 2, 5]);
+    ///
+    /// let mut slice = vec.vecslice(1..=2);
+    /// assert_eq!(slice, [1, 2]);
+    /// slice.drain(..);
+    /// assert_eq!(slice, []);
+    /// assert_eq!(vec, &[0, 5]);
+    /// ```
+    pub fn drain<'borrow>(&'borrow mut self, range: impl RangeBounds<usize>) -> crate::drain::Drain<'a, 'borrow, T> {
+        crate::drain::Drain::new(self, range)
     }
     /// Clears the slice, removing all values.
     ///
@@ -544,46 +591,31 @@ where
     pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, T> {
         self.as_mut().iter_mut()
     }
-    /// Consumes `self` and returns the original slice.
-    pub fn into_original(self) -> &'a mut S {
+    /// Consumes `self` and returns a mutable reference to the original slice.
+    pub fn into_original(self) -> &'a mut dyn Sliceable<T> {
         self.original
+    }
+    /// Returns the length of the slice.
+    pub fn len(&self) -> usize {
+        self.end - self.start
     }
 }
 
-impl<'a, T, S> Slice<T> for VecSlice<'a, T, S>
-where
-    S: Slice<T>,
-{
-    type Drain<'b> = S::Drain<'b> where Self: 'b;
-
+impl<'a, T> Sliceable<T> for VecSlice<'a, T> {
     fn len(&self) -> usize {
-        self.end - self.start
+        self.len()
     }
 
-    fn insert(&mut self, index: usize, element: T) {
-        assert!(index <= self.len());
-        self.original.insert(self.start + index, element);
-        self.end += 1;
+    fn insert(&mut self, index: usize, value: T) {
+        self.insert(index, value)
     }
 
     fn remove(&mut self, index: usize) -> T {
-        assert!(index <= self.len());
-        self.end -= 1;
-        self.original.remove(self.start + index)
-    }
-
-    fn drain(&mut self, range: impl RangeBounds<usize>) -> Self::Drain<'_> {
-        let (start, end) = Self::translate_range(range, self.start, self.end);
-        assert!(start <= self.end && end <= self.end, "range out of bounds");
-        self.end -= end - start; // Adjust length of the new slice
-        self.original.drain(start..end)
+        self.remove(index)
     }
 }
 
-impl<T, S> Extend<T> for VecSlice<'_, T, S>
-where
-    S: Slice<T> + Extend<T>,
-{
+impl<T> Extend<T> for VecSlice<'_, T> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         // TODO: Use splice instead
         for elem in iter {
@@ -592,22 +624,21 @@ where
     }
 }
 
-impl<T: std::fmt::Debug, S: std::fmt::Debug + Slice<T>> std::fmt::Debug for VecSlice<'_, T, S> {
+impl<T: std::fmt::Debug> std::fmt::Debug for VecSlice<'_, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let v = self.as_ref();
         f.debug_struct("VecSlice")
             .field("slice", &v)
             .field("start", &self.start)
             .field("end", &self.end)
-            .field("original", &self.original)
+            .field("original", &self.original.as_ref())
             .finish()
     }
 }
 
-impl<T, S, Rhs> PartialEq<Rhs> for VecSlice<'_, T, S>
+impl<T, Rhs> PartialEq<Rhs> for VecSlice<'_, T>
 where
     T: PartialEq,
-    S: Slice<T>,
     Rhs: AsRef<[T]>,
 {
     fn eq(&self, other: &Rhs) -> bool {
@@ -615,10 +646,9 @@ where
     }
 }
 
-impl<T, S, Rhs> PartialOrd<Rhs> for VecSlice<'_, T, S>
+impl<T, Rhs> PartialOrd<Rhs> for VecSlice<'_, T>
 where
     T: PartialOrd,
-    S: Slice<T>,
     Rhs: AsRef<[T]>,
 {
     fn partial_cmp(&self, other: &Rhs) -> Option<core::cmp::Ordering> {
@@ -626,52 +656,43 @@ where
     }
 }
 
-impl<T, S: Slice<T>> core::borrow::Borrow<[T]> for VecSlice<'_, T, S> {
+impl<T> core::borrow::Borrow<[T]> for VecSlice<'_, T> {
     fn borrow(&self) -> &[T] {
         self.as_ref()
     }
 }
 
-impl<T, S: Slice<T>> core::borrow::BorrowMut<[T]> for VecSlice<'_, T, S> {
+impl<T> core::borrow::BorrowMut<[T]> for VecSlice<'_, T> {
     fn borrow_mut(&mut self) -> &mut [T] {
         self.as_mut()
     }
 }
 
-impl<T, S: Slice<T>> AsRef<[T]> for VecSlice<'_, T, S> {
+impl<T> AsRef<[T]> for VecSlice<'_, T> {
     fn as_ref(&self) -> &[T] {
         &self.original.as_ref()[self.start..self.end]
     }
 }
 
-impl<T, S: Slice<T>> AsMut<[T]> for VecSlice<'_, T, S> {
+impl<T> AsMut<[T]> for VecSlice<'_, T> {
     fn as_mut(&mut self) -> &mut [T] {
         &mut self.original.as_mut()[self.start..self.end]
     }
 }
 
-impl<'a, T, S> From<&'a mut S> for VecSlice<'a, T, S>
-where
-    S: Slice<T>,
-{
-    fn from(original: &'a mut S) -> Self {
+impl<'a, T> From<&'a mut dyn Sliceable<T>> for VecSlice<'a, T> {
+    fn from(original: &'a mut dyn Sliceable<T>) -> Self {
         Self::new(.., original)
     }
 }
 
-impl<T> Slice<T> for Vec<T> {
-    type Drain<'b> = std::vec::Drain<'b, T> where T: 'b;
-
+impl<T> Sliceable<T> for Vec<T> {
     fn insert(&mut self, index: usize, element: T) {
         self.insert(index, element)
     }
 
     fn remove(&mut self, index: usize) -> T {
         self.remove(index)
-    }
-
-    fn drain(&mut self, range: impl RangeBounds<usize>) -> Self::Drain<'_> {
-        self.drain(range)
     }
 
     fn len(&self) -> usize {

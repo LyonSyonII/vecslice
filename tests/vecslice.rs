@@ -80,9 +80,9 @@ test! {
     new_recursive => {
         // Should compile
         let mut v = vec![0i32; 0];
-        let mut s: VecSlice<'_, i32, Vec<i32>> = v.vecslice_at_head();
-        let mut s: VecSlice<'_, i32, VecSlice<'_, i32, Vec<i32>>> = s.vecslice_at_head();
-        let _: VecSlice<'_, i32, VecSlice<'_, i32, VecSlice<'_, i32, Vec<i32>>>> = s.vecslice_at_head();
+        let mut s: VecSlice<'_, i32> = v.vecslice_at_head();
+        let mut s: VecSlice<'_, i32> = s.vecslice_at_head();
+        let _: VecSlice<'_, i32> = s.vecslice_at_head();
     }
 
     len0 => assert_eq!(vec![0; 0].vecslice(..).len(), 0)
