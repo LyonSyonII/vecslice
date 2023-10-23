@@ -1,12 +1,12 @@
-//! This module provides the [`VecSlice`] struct, which represents a growable mutable reference on a [`Vec`].
+//! This module provides the [`VecSlice`] struct, which represents a growable mutable slice on a [`Vec`].
 //!
-//! The [`VecSlice`] struct allows you to work with a mutable slice of a [`Vec`] while ensuring memory safety by requiring a mutable reference to the underlying buffer, only one [`VecSlice`] can exist at a time, preventing multiple mutable references and potential data races.
-//!
+//! Due to requiring a mutable reference to the underlying buffer, only one [`VecSlice`] can exist at a time, ensuring memory safety.
+//! 
 //! # Complexity
 //!
 //! All operations on a [`VecSlice`] have O(n) complexity, as the slice can start and end anywhere on the original vector.
 //!
-//! If you use [`VecSlice::new_at_tail`] to create a slice, the complexity of push operations on the new slice will be O(1).
+//! If you use [`VecSlice::new_at_tail`] to create a slice, the complexity of push_back operations on the new slice will be O(1).
 //!
 //! # Examples
 //!
@@ -42,7 +42,10 @@
 //! assert_eq!(vec, [0, 2, 3]);
 //!
 //! ```
-//! For more information, see the [`VecSlice`] struct documentation.
+//! 
+//! # Implementing [`Sliceable`]
+//! [`VecSlice`] is generic over any type that implements [`Sliceable`], so it can be used with other types than [`Vec`].
+//! The [`Slice`] trait will be automatically implemented for any type that implements [`Sliceable`], so you don't need to implement it yourself.
 
 use core::ops::RangeBounds;
 
@@ -74,7 +77,6 @@ mod iter;
 /// assert_eq!(slice, [1, 2, 3]);
 /// assert_eq!(vec, [1, 2, 3, 3]);
 /// ```
-// #[derive(Eq, Ord)]
 pub struct VecSlice<'a, T> {
     start: usize,
     end: usize,
@@ -85,6 +87,23 @@ pub trait Slice<T>: Sliceable<T>
 where
     Self: Sized,
 {
+    /// Creates a new [`VecSlice`] from the given range.
+    /// See the module documentation for more information.
+    /// 
+    /// # Examples
+    ///
+    /// ```
+    /// use vecslice::Slice;
+    ///
+    /// let mut vec = vec![1, 2, 3];
+    /// let mut slice = vec.vecslice(0..=1);
+    /// assert_eq!(slice.len(), 2);
+    /// assert_eq!(slice, [1, 2]);
+    ///
+    /// slice.push_back(3);
+    /// assert_eq!(slice, [1, 2, 3]);
+    /// assert_eq!(vec, [1, 2, 3, 3]);
+    /// ```
     fn vecslice(&mut self, range: impl core::ops::RangeBounds<usize>) -> VecSlice<'_, T> {
         VecSlice::new(range, self as &mut dyn Sliceable<T>)
     }
@@ -186,7 +205,7 @@ pub trait Sliceable<T>: AsRef<[T]> + AsMut<[T]> {
     /// assert_eq!(v, [1, 3]);
     /// ```
     fn remove(&mut self, index: usize) -> T;
-    /// Returns the length of the slice.
+    /// Returns the length of the collection.
     fn len(&self) -> usize;
 }
 

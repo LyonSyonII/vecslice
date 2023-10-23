@@ -34,6 +34,10 @@ impl<T> Iterator for Drain<'_, '_, T> {
             None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.len(), Some(self.len()))
+    }
 }
 
 impl<T> ExactSizeIterator for Drain<'_, '_, T> {
