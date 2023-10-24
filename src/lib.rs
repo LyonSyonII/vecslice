@@ -650,10 +650,10 @@ impl<T: std::fmt::Debug> std::fmt::Debug for VecSlice<'_, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let v = self.as_ref();
         f.debug_struct("VecSlice")
-            .field("slice", &v)
+            .field("original", &self.original.as_ref())
             .field("start", &self.start)
             .field("end", &self.end)
-            .field("original", &self.original.as_ref())
+            .field("slice", &v)
             .finish()
     }
 }
@@ -668,6 +668,8 @@ where
     }
 }
 
+impl<T> Eq for VecSlice<'_, T> where T: PartialEq { }
+
 impl<T, Rhs> PartialOrd<Rhs> for VecSlice<'_, T>
 where
     T: PartialOrd,
@@ -675,6 +677,12 @@ where
 {
     fn partial_cmp(&self, other: &Rhs) -> Option<core::cmp::Ordering> {
         self.as_ref().partial_cmp(other.as_ref())
+    }
+}
+
+impl<T> Ord for VecSlice<'_, T> where T: Ord {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.as_ref().cmp(other.as_ref())
     }
 }
 
@@ -705,6 +713,15 @@ impl<T> AsMut<[T]> for VecSlice<'_, T> {
 impl<'a, T> From<&'a mut dyn Sliceable<T>> for VecSlice<'a, T> {
     fn from(original: &'a mut dyn Sliceable<T>) -> Self {
         Self::new(.., original)
+    }
+}
+
+impl<'a, T, S> From<&'a mut S> for VecSlice<'a, T>
+where
+    S: Sliceable<T>,
+{
+    fn from(original: &'a mut S) -> Self {
+        Self::new(.., original as &mut dyn Sliceable<T>)
     }
 }
 
