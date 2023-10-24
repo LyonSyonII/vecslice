@@ -88,6 +88,7 @@ where
     Self: Sized,
 {
     /// Creates a new [`VecSlice`] from the given range.
+    /// 
     /// See the module documentation for more information.
     /// 
     /// # Examples
@@ -106,6 +107,14 @@ where
     /// ```
     fn vecslice(&mut self, range: impl core::ops::RangeBounds<usize>) -> VecSlice<'_, T> {
         VecSlice::new(range, self as &mut dyn Sliceable<T>)
+    }
+    /// Creates a new [`VecSlice`] from the given range.
+    /// 
+    /// Returns `None` if the range is out of bounds.
+    /// 
+    /// See the module documentation for more information.
+    fn try_vecslice(&mut self, range: impl core::ops::RangeBounds<usize>) -> Option<VecSlice<'_, T>> {
+        VecSlice::try_new(range, self as &mut dyn Sliceable<T>)
     }
     /// Creates a new [`VecSlice`] at the tail of the current one.
     ///
@@ -224,16 +233,28 @@ impl<'a, T> VecSlice<'a, T> {
             (Unbounded, Unbounded) => (start, end),
         }
     }
-
+    
+    /// Creates a new [`VecSlice`] from the specified range.
+    /// Panics if the range is out of bounds.
     pub fn new(
         range: impl core::ops::RangeBounds<usize>,
         original: &'a mut dyn Sliceable<T>,
     ) -> VecSlice<'a, T> {
+        Self::try_new(range, original).expect("range out of bounds")
+    }
+    
+    /// Creates a new [`VecSlice`] from the specified range.
+    /// Returns `None` if the range is out of bounds.
+    pub fn try_new(range: impl core::ops::RangeBounds<usize>, original: &'a mut dyn Sliceable<T>) -> Option<VecSlice<'a, T>> {
         let (start, end) = VecSlice::<T>::translate_range(range, 0, original.len());
-        VecSlice {
-            start,
-            end,
-            original,
+        if start <= end && end <= original.len() {
+            Some(VecSlice {
+                start,
+                end,
+                original,
+            })
+        } else {
+            None
         }
     }
 
