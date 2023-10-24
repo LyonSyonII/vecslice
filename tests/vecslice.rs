@@ -38,7 +38,6 @@ test! {
     
     new_range_excluded => v.clone().vecslice(0..i) == &v[0..i]
     
-    #[allow(clippy::blocks_in_if_conditions)]
     new_range_included => match (v.clone().try_vecslice(0..=i), v.get(0..=i)) {
         (Some(s), Some(v)) => s == v,
         (None, None) => true,
